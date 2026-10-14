@@ -1,0 +1,11 @@
+[
+  {
+    "modid": "purpleclicker",
+    "name": "PurpleClicker",
+    "description": "Autoclicker with a purple, customizable menu. Menu: Right Shift, toggle: R.",
+    "version": "${version}",
+    "mcversion": "1.8.9",
+    "authorList": [],
+    "dependencies": []
+  }
+]
