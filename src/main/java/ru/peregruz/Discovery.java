@@ -34,16 +34,17 @@ public final class Discovery {
                 ? ShizukuGrant.exec("dumpsys", "audio")
                 : new ProcessBuilder("dumpsys", "audio").redirectErrorStream(true).start();
         Map<Integer, Integer> out = new LinkedHashMap<>();
-        int lines = 0, playerLines = 0;
+        int lines = 0, playerLines = 0, sessionLines = 0;
         String sample = null;
         int myUid = android.os.Process.myUid();
         try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
             String line;
             while ((line = r.readLine()) != null) {
                 lines++;
-                if (!line.contains("u/pid:")) continue;
+                if (!line.contains("u/pid:") || !line.contains("AudioPlaybackConfiguration")) continue;
                 playerLines++;
                 if (sample == null) sample = line.trim();
+                if (SESSION.matcher(line).find()) sessionLines++;
                 Matcher mu = UID.matcher(line), ms = SESSION.matcher(line), mst = STATE.matcher(line);
                 if (!mu.find() || !ms.find()) continue;
                 int uid = Integer.parseInt(mu.group(1));
@@ -62,7 +63,7 @@ public final class Discovery {
         }
         p.waitFor();
         if (lines < 5) throw new Exception("система не отдала данные о звуке");
-        if (playerLines > 0 && out.isEmpty() && sample != null && !SESSION.matcher(sample).find()) {
+        if (playerLines > 0 && sessionLines == 0 && sample != null) {
             throw new Exception("не нашёл номера сессий: " + (sample.length() > 160 ? sample.substring(0, 160) : sample));
         }
         return out;
