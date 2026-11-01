@@ -42,6 +42,7 @@ public class MainActivity extends Activity {
     private TextView vDrive, vTone, vLow, vOut;
     private Switch global;
     private TextView accessView;
+    private android.widget.EditText codeInput;
 
     private final Runnable refresh = new Runnable() {
         @Override public void run() { renderStatus(); handler.postDelayed(this, 1000); }
@@ -149,20 +150,56 @@ public class MainActivity extends Activity {
         TextView gh = text("Если музыка звучит без эффекта, включите этот переключатель. На некоторых телефонах система его не пускает, тогда здесь появится «не удалось».", 13, SILK_DIM, false);
         root.addView(gh, lp(dp(4), 0));
 
-        // ---- access to all players ----
+        // ---- access to all players (built-in ADB) ----
         TextView al = text("ВСЕ ПЛЕЕРЫ: SPOTIFY, YOUTUBE И ДРУГИЕ", 11, SILK_DIM, true);
         al.setLetterSpacing(0.12f);
         root.addView(al, lp(dp(24), dp(6)));
-        root.addView(text("Многие приложения (в том числе Spotify) не сообщают системе о своём звуке. Чтобы педаль находила их сама, нужно один раз выдать доступ через приложение Shizuku.", 14, SILK, false));
-        Button access = new Button(this);
-        access.setAllCaps(false);
-        access.setText("Дать доступ ко всем плеерам");
-        access.setTextColor(INK);
-        access.setTypeface(Typeface.DEFAULT_BOLD);
-        access.setBackground(round(ACCENT, 12));
-        access.setOnClickListener(v -> giveAccess());
-        root.addView(access, lp(dp(12), 0));
-        accessView = text("", 14, SILK_DIM, false);
+        root.addView(text("Spotify и многие другие приложения не сообщают системе о своём звуке. Педаль найдёт их сама, если один раз связать её с «Отладкой по Wi-Fi». Shizuku не нужен.\n\n"
+                + "1. Нажмите кнопку ниже: настройки откроются рядом (на половине экрана).\n"
+                + "2. Там откройте «Отладка по Wi-Fi» (нажмите на текст, не на переключатель) → «Подключить устройство с помощью кода». Окно с кодом не закрывайте.\n"
+                + "3. Впишите 6 цифр сюда и нажмите «Сопрячь».", 14, SILK, false));
+        Button openSettings = new Button(this);
+        openSettings.setAllCaps(false);
+        openSettings.setText("Открыть настройки рядом");
+        openSettings.setTextColor(INK);
+        openSettings.setBackground(round(SILK, 12));
+        openSettings.setOnClickListener(v -> openDevSettings());
+        root.addView(openSettings, lp(dp(12), 0));
+
+        LinearLayout codeRow = hbox();
+        codeRow.setGravity(Gravity.CENTER_VERTICAL);
+        codeInput = new android.widget.EditText(this);
+        codeInput.setHint("Код из 6 цифр");
+        codeInput.setHintTextColor(SILK_DIM);
+        codeInput.setTextColor(SILK);
+        codeInput.setTextSize(20);
+        codeInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        codeInput.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(6)});
+        codeInput.setLetterSpacing(0.2f);
+        codeRow.addView(codeInput, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        Button pairBtn = new Button(this);
+        pairBtn.setAllCaps(false);
+        pairBtn.setText("Сопрячь");
+        pairBtn.setTextColor(INK);
+        pairBtn.setTypeface(Typeface.DEFAULT_BOLD);
+        pairBtn.setBackground(round(ACCENT, 12));
+        pairBtn.setOnClickListener(v -> pair());
+        LinearLayout.LayoutParams pbp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        pbp.leftMargin = dp(8);
+        codeRow.addView(pairBtn, pbp);
+        root.addView(codeRow, lp(dp(12), 0));
+
+        Button check = new Button(this);
+        check.setAllCaps(false);
+        check.setText("Проверить подключение");
+        check.setTextColor(SILK);
+        check.setBackground(round(0xFF1D2D25, 12));
+        check.setOnClickListener(v -> checkAdb());
+        root.addView(check, lp(dp(8), 0));
+
+        accessView = text(prefs.getBoolean(Fx.K_PAIRED, false)
+                ? "Сопряжение уже сделано. Если педаль пишет, что ждёт «Отладку по Wi-Fi», включите её в «Для разработчиков»."
+                : "", 14, SILK_DIM, false);
         accessView.setTextIsSelectable(true);
         root.addView(accessView, lp(dp(8), 0));
 
@@ -172,7 +209,7 @@ public class MainActivity extends Activity {
         root.addView(hl, lp(dp(24), dp(6)));
         root.addView(text(
                 "1. Нажмите «Включить педаль».\n" +
-                "2. Запустите Shizuku (через «Отладку по Wi-Fi») и нажмите «Дать доступ ко всем плеерам». Если Shizuku не показывает окно разрешения, включите «Перегруз» вручную в Shizuku → «Управление приложениями».\n" +
+                "2. Один раз сделайте сопряжение в разделе «Все плееры» выше. «Отладка по Wi-Fi» должна оставаться включённой.\n" +
                 "3. Включите музыку в любом приложении. Через пару секунд оно появится в списке «К чему подключено».\n" +
                 "4. Чтобы HyperOS не выключала педаль: нажмите кнопку ниже, затем «Контроль активности» → «Нет ограничений» и включите «Автозапуск».\n" +
                 "5. Начинайте с небольшой громкости: дисторшн делает звук громче и резче.",
@@ -212,27 +249,89 @@ public class MainActivity extends Activity {
         handler.postDelayed(this::render, 1500);
     }
 
-    private void giveAccess() {
-        if (Discovery.hasPermission(this)) {
-            accessView.setText("Доступ уже есть. Включите педаль и музыку: плеер появится в списке за пару секунд.");
-            return;
-        }
-        if (!ShizukuGrant.running()) {
-            accessView.setText("Shizuku не запущен. Откройте Shizuku и нажмите «Запустить» в блоке «Запуск через отладку по Wi-Fi», потом вернитесь сюда и нажмите кнопку ещё раз.");
-            return;
-        }
-        if (!ShizukuGrant.allowed()) {
-            accessView.setText("Разрешите «Перегрузу» доступ в окне Shizuku.\n\nЕсли окно не появилось или Shizuku пишет «Доступ к adb ограничен»: откройте Shizuku, нажмите «Управление приложениями» (или «Авторизованные приложения») и включите переключатель у «Перегруза». Потом вернитесь сюда.");
+    private volatile int pairingPort = -1;
+    private volatile boolean searching = false;
+
+    private void startPortSearch() {
+        if (searching) return;
+        searching = true;
+        new Thread(() -> {
             try {
-                ShizukuGrant.ask((ok, msg) -> runOnUiThread(() -> { if (ok) giveAccess(); }));
-            } catch (Throwable ignored) {}
+                int p = Adb.findPairingPort(this, 180000);
+                if (p > 0) {
+                    pairingPort = p;
+                    runOnUiThread(() -> accessView.setText("Вижу окно с кодом. Впишите 6 цифр и нажмите «Сопрячь»."));
+                }
+            } catch (Throwable ignored) {
+            } finally {
+                searching = false;
+            }
+        }).start();
+    }
+
+    private void openDevSettings() {
+        pairingPort = -1;
+        startPortSearch();
+        accessView.setText("Откройте «Отладка по Wi-Fi» → «Подключить устройство с помощью кода» и не закрывайте окно с кодом.");
+        Intent i = new Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS);
+        i.addFlags(Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT | Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
+        try {
+            startActivity(i);
+        } catch (Exception e) {
+            accessView.setText("Не получилось открыть настройки. Откройте вручную: Настройки → Доп. настройки → Для разработчиков → Отладка по Wi-Fi.");
+        }
+    }
+
+    private void pair() {
+        String code = codeInput.getText().toString().trim();
+        if (code.length() != 6) {
+            accessView.setText("Нужен код из 6 цифр из окна «Подключить устройство с помощью кода».");
             return;
         }
-        accessView.setText("Проверяю доступ…");
-        new Thread(() -> ShizukuGrant.grant(this, (ok, msg) -> runOnUiThread(() -> accessView.setText(ok
-                ? "Готово! Доступ выдан насовсем. Включите педаль и музыку: плеер появится в списке за пару секунд."
-                : "Готово! Shizuku подключён. Xiaomi не разрешает выдать доступ насовсем, поэтому педаль будет искать плееры через Shizuku. "
-                + "Важно: Shizuku должен быть запущен, а после перезагрузки телефона его нужно запускать заново.\n\nВключите педаль и музыку: плеер появится в списке за пару секунд.")))).start();
+        accessView.setText("Сопрягаю…");
+        startPortSearch();
+        new Thread(() -> {
+            String msg;
+            try {
+                long until = System.currentTimeMillis() + 15000;
+                while (pairingPort <= 0 && System.currentTimeMillis() < until) Thread.sleep(300);
+                int port = pairingPort;
+                if (port <= 0) {
+                    msg = "Не вижу окно с кодом. В настройках откройте «Отладка по Wi-Fi» → «Подключить устройство с помощью кода», не закрывайте его и нажмите «Сопрячь» ещё раз (код мог смениться).";
+                } else if (!Adb.pairWith(this, port, code)) {
+                    msg = "Код не подошёл. Проверьте цифры: код меняется каждый раз, когда открываешь окно.";
+                } else {
+                    prefs.edit().putBoolean(Fx.K_PAIRED, true).apply();
+                    pairingPort = -1;
+                    boolean ok = Adb.get(this).ensure(this, 8000);
+                    msg = ok ? "Готово! Педаль связана с «Отладкой по Wi-Fi». Включите педаль и музыку в Spotify: через пару секунд он появится в списке «К чему подключено»."
+                             : "Сопряжение прошло, но подключиться пока не вышло. Проверьте, что «Отладка по Wi-Fi» включена, и нажмите «Проверить подключение».";
+                }
+            } catch (Throwable t) {
+                msg = "Ошибка сопряжения: " + t;
+            }
+            final String m = msg;
+            runOnUiThread(() -> accessView.setText(m));
+        }).start();
+    }
+
+    private void checkAdb() {
+        accessView.setText("Проверяю…");
+        new Thread(() -> {
+            String msg;
+            try {
+                String out = Adb.run(this, "echo ok");
+                prefs.edit().putBoolean(Fx.K_PAIRED, true).apply();
+                msg = out.trim().equals("ok") ? "Подключено. Автопоиск плееров работает, когда включена педаль." : "Подключено, ответ: " + out.trim();
+            } catch (io.github.muntashirakon.adb.AdbPairingRequiredException e) {
+                prefs.edit().putBoolean(Fx.K_PAIRED, false).apply();
+                msg = "Нужно сопряжение: сделайте шаги 1–3 выше.";
+            } catch (Throwable t) {
+                msg = "Не подключено: " + t.getMessage() + "\nПроверьте, что «Отладка по Wi-Fi» включена и телефон подключён к Wi-Fi.";
+            }
+            final String m = msg;
+            runOnUiThread(() -> accessView.setText(m));
+        }).start();
     }
 
     private void render() {

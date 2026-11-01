@@ -8,6 +8,15 @@ import java.io.StringWriter;
 /** Saves any crash so the next launch can show it on screen. */
 public class App extends Application {
     @Override
+    protected void attachBaseContext(android.content.Context base) {
+        super.attachBaseContext(base);
+        try {
+            // Lets the ADB library use the system TLS (Conscrypt) for "Wireless debugging".
+            org.lsposed.hiddenapibypass.HiddenApiBypass.addHiddenApiExemptions("L");
+        } catch (Throwable ignored) {}
+    }
+
+    @Override
     public void onCreate() {
         super.onCreate();
         final Thread.UncaughtExceptionHandler prev = Thread.getDefaultUncaughtExceptionHandler();
