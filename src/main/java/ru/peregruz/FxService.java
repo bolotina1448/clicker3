@@ -60,6 +60,16 @@ public class FxService extends Service implements SharedPreferences.OnSharedPref
     public void onCreate() {
         super.onCreate();
         prefs = Fx.prefs(this);
+        try {
+            start();
+        } catch (Throwable t) {
+            prefs.edit().putString(Fx.K_ERROR, App.trace(t)).putBoolean(Fx.K_ON, false).commit();
+            running = false;
+            stopSelf();
+        }
+    }
+
+    private void start() {
         NotificationManager nm = getSystemService(NotificationManager.class);
         nm.createNotificationChannel(new NotificationChannel(CHANNEL, "Перегруз", NotificationManager.IMPORTANCE_LOW));
         Notification n = buildNotification();
@@ -97,7 +107,7 @@ public class FxService extends Service implements SharedPreferences.OnSharedPref
     public void onDestroy() {
         running = false;
         try { unregisterReceiver(receiver); } catch (Exception ignored) {}
-        prefs.unregisterOnSharedPreferenceChangeListener(this);
+        try { prefs.unregisterOnSharedPreferenceChangeListener(this); } catch (Exception ignored) {}
         for (DynamicsProcessing dp : effects.values()) {
             try { dp.setEnabled(false); dp.release(); } catch (Exception ignored) {}
         }

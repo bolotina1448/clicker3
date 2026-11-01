@@ -135,6 +135,7 @@ public class MainActivity extends Activity {
         sl.setLetterSpacing(0.12f);
         root.addView(sl, lp(dp(20), dp(6)));
         statusView = text("", 15, SILK, false);
+        statusView.setTextIsSelectable(true);
         root.addView(statusView);
 
         global = new Switch(this);
@@ -182,10 +183,15 @@ public class MainActivity extends Activity {
                 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1);
         }
-        prefs.edit().putBoolean(Fx.K_ON, on).apply();
+        prefs.edit().putBoolean(Fx.K_ON, on).remove(Fx.K_ERROR).apply();
         Intent svc = new Intent(this, FxService.class);
-        if (on) startForegroundService(svc); else stopService(svc);
+        try {
+            if (on) startForegroundService(svc); else stopService(svc);
+        } catch (Throwable t) {
+            prefs.edit().putString(Fx.K_ERROR, App.trace(t)).putBoolean(Fx.K_ON, false).apply();
+        }
         handler.postDelayed(this::render, 300);
+        handler.postDelayed(this::render, 1500);
     }
 
     private void render() {
@@ -223,6 +229,10 @@ public class MainActivity extends Activity {
         if (!on) statusView.setText("Педаль выключена.");
         else if (s.isEmpty()) statusView.setText("Пока ни одного приложения. Запустите музыку заново (шаг 2 ниже).");
         else statusView.setText("• " + String.join("\n• ", s));
+        String err = prefs.getString(Fx.K_ERROR, null);
+        if (err != null && !on) {
+            statusView.setText("Педаль не запустилась. Сделайте скриншот этого текста и пришлите его:\n\n" + err);
+        }
     }
 
     private SeekBar knob(LinearLayout parent, String name, TextView value, String key, int initial) {

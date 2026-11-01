@@ -10,7 +10,7 @@ public final class Fx {
 
     public static final String PREFS = "fx";
     public static final String K_ON = "on", K_TYPE = "type", K_DRIVE = "drive", K_TONE = "tone",
-            K_LOW = "low", K_OUT = "out", K_GLOBAL = "global";
+            K_LOW = "low", K_OUT = "out", K_GLOBAL = "global", K_ERROR = "error";
 
     public static final int OVERDRIVE = 0, DISTORTION = 1, FUZZ = 2, RADIO = 3;
     public static final String[] TYPE_NAMES = {"Овердрайв", "Дисторшн", "Фузз", "Радио"};
