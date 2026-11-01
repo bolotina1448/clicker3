@@ -13,8 +13,8 @@ public final class Fx {
             K_LOW = "low", K_OUT = "out", K_CRACKLE = "crackle",
             K_GLOBAL = "global", K_ERROR = "error", K_PAIRED = "paired";
 
-    public static final int OVERDRIVE = 0, DISTORTION = 1, FUZZ = 2, RADIO = 3, BROKEN = 4;
-    public static final String[] TYPE_NAMES = {"Овердрайв", "Дисторшн", "Фузз", "Радио", "Сломанный"};
+    public static final int OVERDRIVE = 0, DISTORTION = 1, FUZZ = 2, RADIO = 3, BROKEN = 4, CRACKLING = 5;
+    public static final String[] TYPE_NAMES = {"Овердрайв", "Дисторшн", "Фузз", "Радио", "Сломанный", "Треск"};
 
     public static SharedPreferences prefs(Context c) {
         return c.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
@@ -86,7 +86,10 @@ public final class Fx {
 
     static float inputGain(SharedPreferences p) {
         float d = drive(p) / 100f;
-        return type(p) == BROKEN ? 12f + d * 36f : d * 30f;
+        int t = type(p);
+        if (t == BROKEN) return 12f + d * 36f;
+        if (t == CRACKLING) return 4f + d * 22f;
+        return d * 30f;
     }
 
     static float[] limiter(SharedPreferences p) {
@@ -97,6 +100,7 @@ public final class Fx {
             case FUZZ:      attack = 0.1f;  release = 1f;   ratio = 30f; threshold = -14f - d * 16f; break;
             case RADIO:     attack = 0.1f;  release = 2f;   ratio = 20f; threshold = -10f - d * 16f; break;
             case BROKEN:    attack = 0.01f; release = 0.2f; ratio = 50f; threshold = -24f - d * 12f; break;
+            case CRACKLING: attack = 0.01f; release = 0.5f; ratio = 30f; threshold = -10f - d * 12f; break;
             default:        attack = 0.1f;  release = 2f;   ratio = 20f; threshold = -10f - d * 18f; break;
         }
         float post = -threshold - 4f + outDb(out(p));
@@ -140,7 +144,7 @@ public final class Fx {
                 float f = n == 1 ? 20000f : (float) (lowHz * Math.pow(20000.0 / lowHz, i / (double) (n - 1)));
                 float g;
                 if (i == 0) g = lowHz > 25f ? -24f : 0f;
-                else if (f >= 800f && f <= 5000f) g = (type == BROKEN ? 8f : 3f) * d;
+                else if (f >= 800f && f <= 5000f) g = (type == BROKEN ? 8f : type == CRACKLING ? 4f : 3f) * d;
                 else g = 0f;
                 pre.setBand(i, new DynamicsProcessing.EqBand(true, f, g));
             }
@@ -151,9 +155,11 @@ public final class Fx {
         int nb = mbcBands(dp);
         if (nb > 0) {
             try {
-                boolean on = type == BROKEN || c > 0f;
-                float gate = type == BROKEN ? -42f + Math.max(c, 0.4f) * 34f : -70f + c * 50f;
-                float expander = type == BROKEN ? 6f + c * 44f : 1f + c * 25f;
+                boolean on = type == BROKEN || type == CRACKLING || c > 0f;
+                float gate, expander;
+                if (type == BROKEN) { gate = -42f + Math.max(c, 0.4f) * 34f; expander = 6f + c * 44f; }
+                else if (type == CRACKLING) { gate = -62f + c * 24f; expander = 1.5f + c * 2.5f; }  // mild: crackly, never silent
+                else { gate = -70f + c * 30f; expander = 1f + c * 3f; }
                 DynamicsProcessing.Mbc mbc = new DynamicsProcessing.Mbc(true, on, nb);
                 for (int i = 0; i < nb; i++) {
                     float f = nb == 1 ? 20000f : (float) (120.0 * Math.pow(20000.0 / 120.0, (i + 1) / (double) nb));

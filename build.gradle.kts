@@ -10,8 +10,8 @@ android {
         applicationId = "ru.peregruz"
         minSdk = 29
         targetSdk = 34
-        versionCode = 8
-        versionName = "1.5"
+        versionCode = 9
+        versionName = "1.6"
     }
 
     signingConfigs {

@@ -125,23 +125,32 @@ public class FxService extends Service implements SharedPreferences.OnSharedPref
         publish();
     }
 
-    /** Random short dropouts and gain spikes: the "something is breaking" clicks. Returns the delay to the next tick. */
+    /**
+     * Random short gain spikes into the clipper (crackles). Only the "Broken" type also gets dropouts;
+     * every other type keeps the music going. Returns the delay to the next tick.
+     */
     private long crackleOnce() {
+        int type = Fx.type(prefs);
         float c = Fx.crackle(prefs) / 100f;
-        if (Fx.type(prefs) == Fx.BROKEN) c = Math.max(c, 0.2f);
+        if (type == Fx.BROKEN) c = Math.max(c, 0.2f);
+        if (type == Fx.CRACKLING) c = Math.max(c, 0.3f);
         if (c <= 0f) return 200;
         List<DynamicsProcessing> list;
         synchronized (this) { list = new ArrayList<>(effects.values()); }
         if (list.isEmpty()) return 200;
-        if (rnd.nextFloat() > c * 0.35f) return 20 + rnd.nextInt(40);
+        boolean dense = type == Fx.CRACKLING;
+        float prob = dense ? c * 0.9f : c * 0.35f;
+        if (rnd.nextFloat() > prob) return dense ? 6 + rnd.nextInt(20) : 20 + rnd.nextInt(40);
         float[] lim = Fx.limiter(prefs);
         float gain = Fx.inputGain(prefs);
-        boolean dropout = rnd.nextFloat() < 0.6f;
-        long hold = dropout ? 8 + rnd.nextInt((int) (10 + 50 * c)) : 4 + rnd.nextInt(20);
+        boolean dropout = type == Fx.BROKEN && rnd.nextFloat() < 0.6f;
+        long hold = dropout ? 8 + rnd.nextInt((int) (10 + 50 * c))
+                : dense ? 2 + rnd.nextInt(5) : 3 + rnd.nextInt(10);
+        float spike = dense ? 8f + rnd.nextInt(11) : 10f + rnd.nextInt(8);
         for (DynamicsProcessing dp : list) {
             try {
                 if (dropout) Fx.setLimiter(dp, lim, -60f);
-                else Fx.setGain(dp, gain + 10f + rnd.nextInt(8));
+                else Fx.setGain(dp, gain + spike);
             } catch (Throwable ignored) {}
         }
         try { Thread.sleep(hold); } catch (InterruptedException ignored) {}
@@ -151,7 +160,7 @@ public class FxService extends Service implements SharedPreferences.OnSharedPref
                 else Fx.setGain(dp, gain);
             } catch (Throwable ignored) {}
         }
-        return 15 + rnd.nextInt((int) (20 + 120 * (1f - c)));
+        return dense ? 4 + rnd.nextInt((int) (10 + 40 * (1f - c))) : 15 + rnd.nextInt((int) (20 + 120 * (1f - c)));
     }
 
     private void scanOnce() {
