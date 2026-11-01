@@ -146,7 +146,14 @@ public final class Adb extends AbsAdbConnectionManager {
         try (AdbStream s = a.openStream("shell:" + cmd);
              BufferedReader r = new BufferedReader(new InputStreamReader(s.openInputStream(), StandardCharsets.UTF_8))) {
             String line;
-            while ((line = r.readLine()) != null) sb.append(line).append('\n');
+            try {
+                while ((line = r.readLine()) != null) sb.append(line).append('\n');
+            } catch (java.io.IOException e) {
+                // adbd closes the stream right after the last line; that is a normal end.
+                if (sb.length() == 0) throw e;
+            }
+        } catch (java.io.IOException e) {
+            if (sb.length() == 0) throw e;
         }
         return sb.toString();
     }

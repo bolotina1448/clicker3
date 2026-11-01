@@ -38,65 +38,115 @@ public final class Fx {
         return (out - 70) * 0.4f; // -28 dB .. +12 dB
     }
 
+    /** Last problem seen while configuring an effect (shown on screen), or null. */
+    public static volatile String lastIssue = null;
+
     public static DynamicsProcessing create(int session, SharedPreferences p) {
-        DynamicsProcessing.Config cfg = new DynamicsProcessing.Config.Builder(
-                DynamicsProcessing.VARIANT_FAVOR_TIME_RESOLUTION,
-                2,
-                true, 3,
-                false, 0,
-                true, 3,
-                true)
-                .setPreferredFrameDuration(10f)
-                .build();
-        DynamicsProcessing dp = new DynamicsProcessing(1000, session, cfg);
+        DynamicsProcessing dp;
+        try {
+            DynamicsProcessing.Config cfg = new DynamicsProcessing.Config.Builder(
+                    DynamicsProcessing.VARIANT_FAVOR_FREQUENCY_RESOLUTION,
+                    2,
+                    true, 3,
+                    false, 0,
+                    true, 3,
+                    true)
+                    .build();
+            dp = new DynamicsProcessing(1000, session, cfg);
+        } catch (RuntimeException first) {
+            // Some phones only accept the default layout.
+            try {
+                dp = new DynamicsProcessing(session);
+            } catch (RuntimeException second) {
+                throw new RuntimeException(short_(first) + " / " + short_(second));
+            }
+        }
         apply(dp, p);
         dp.setEnabled(true);
         return dp;
     }
 
+    static String short_(Throwable t) {
+        String m = t.getMessage();
+        return t.getClass().getSimpleName() + (m == null ? "" : ": " + (m.length() > 90 ? m.substring(0, 90) : m));
+    }
+
+    private static int bands(DynamicsProcessing.Eq eq, int fallback) {
+        try { return Math.max(1, eq.getBandCount()); } catch (Throwable t) { return fallback; }
+    }
+
+    /** Applies the settings; each part is tried on its own so one refused value does not kill the rest. */
     public static void apply(DynamicsProcessing dp, SharedPreferences p) {
         int type = type(p);
         float d = drive(p) / 100f;
         float lowHz = lowHz(low(p));
         float toneHz = toneHz(tone(p));
         float outDb = outDb(out(p));
-
         if (type == RADIO) {
             lowHz = Math.max(lowHz, 450f);
             toneHz = Math.min(toneHz, 3200f);
         }
+        StringBuilder issues = new StringBuilder();
 
-        // Pre-EQ: cut the lows before the clipper (tighter sound), push the mids into it.
-        DynamicsProcessing.Eq pre = new DynamicsProcessing.Eq(true, true, 3);
-        pre.setBand(0, new DynamicsProcessing.EqBand(true, lowHz, lowHz > 25f ? -24f : 0f));
-        pre.setBand(1, new DynamicsProcessing.EqBand(true, 2500f, 3f * d));
-        pre.setBand(2, new DynamicsProcessing.EqBand(true, 20000f, 0f));
-        dp.setPreEqAllChannelsTo(pre);
+        // Pre-EQ: cut the lows before the clipper, push the mids into it.
+        try {
+            int n = bands(dp.getPreEqByChannelIndex(0), 3);
+            DynamicsProcessing.Eq pre = new DynamicsProcessing.Eq(true, true, n);
+            for (int i = 0; i < n; i++) {
+                float f = n == 1 ? 20000f : (float) (lowHz * Math.pow(20000.0 / lowHz, i / (double) (n - 1)));
+                float g;
+                if (i == 0) g = lowHz > 25f ? -24f : 0f;
+                else if (f >= 1000f && f <= 5000f) g = 3f * d;
+                else g = 0f;
+                pre.setBand(i, new DynamicsProcessing.EqBand(true, f, g));
+            }
+            dp.setPreEqAllChannelsTo(pre);
+        } catch (Throwable t) { issues.append("EQ1 ").append(short_(t)).append("; "); }
 
         // Input gain drives the signal into the limiter, which acts as the clipper.
         float inGain = d * 30f;
-        dp.setInputGainAllChannelsTo(inGain);
+        try { dp.setInputGainAllChannelsTo(inGain); }
+        catch (Throwable t) { issues.append("gain ").append(short_(t)).append("; "); }
 
         float attack, release, ratio, threshold;
         switch (type) {
-            case OVERDRIVE: attack = 1f;    release = 25f; ratio = 6f;   threshold = -6f - d * 14f; break;
-            case FUZZ:      attack = 0.01f; release = 0.5f; ratio = 100f; threshold = -14f - d * 16f; break;
-            case RADIO:     attack = 0.05f; release = 2f;  ratio = 40f;  threshold = -10f - d * 16f; break;
-            default:        attack = 0.05f; release = 2f;  ratio = 40f;  threshold = -10f - d * 18f; break;
+            case OVERDRIVE: attack = 1f;   release = 25f; ratio = 6f;  threshold = -6f - d * 14f; break;
+            case FUZZ:      attack = 0.1f; release = 1f;  ratio = 30f; threshold = -14f - d * 16f; break;
+            case RADIO:     attack = 0.1f; release = 2f;  ratio = 20f; threshold = -10f - d * 16f; break;
+            default:        attack = 0.1f; release = 2f;  ratio = 20f; threshold = -10f - d * 18f; break;
         }
-        // Bring the clipped level back to roughly -4 dBFS, then apply the output control.
         float post = -threshold - 4f + outDb;
-        DynamicsProcessing.Limiter lim = new DynamicsProcessing.Limiter(
-                true, true, 0, attack, release, ratio, threshold, post);
-        dp.setLimiterAllChannelsTo(lim);
+        try {
+            dp.setLimiterAllChannelsTo(new DynamicsProcessing.Limiter(
+                    true, true, 0, attack, release, ratio, threshold, post));
+        } catch (Throwable t) {
+            issues.append("lim ").append(short_(t)).append("; ");
+            // Retry with gentler numbers.
+            try {
+                dp.setLimiterAllChannelsTo(new DynamicsProcessing.Limiter(
+                        true, true, 0, 1f, 10f, 10f, threshold, Math.min(post, 20f)));
+            } catch (Throwable t2) { issues.append("lim2 ").append(short_(t2)).append("; "); }
+        }
 
         // Post-EQ: the tone control, a high cut above toneHz.
-        float b1 = toneHz < 10000f ? toneHz * 1.8f : (toneHz + 20000f) / 2f;
-        float hiCut = type == RADIO ? -36f : -18f;
-        DynamicsProcessing.Eq postEq = new DynamicsProcessing.Eq(true, true, 3);
-        postEq.setBand(0, new DynamicsProcessing.EqBand(true, toneHz, 0f));
-        postEq.setBand(1, new DynamicsProcessing.EqBand(true, b1, hiCut / 2f));
-        postEq.setBand(2, new DynamicsProcessing.EqBand(true, 20000f, hiCut));
-        dp.setPostEqAllChannelsTo(postEq);
+        try {
+            int n = bands(dp.getPostEqByChannelIndex(0), 3);
+            float hiCut = type == RADIO ? -36f : -18f;
+            DynamicsProcessing.Eq postEq = new DynamicsProcessing.Eq(true, true, n);
+            for (int i = 0; i < n; i++) {
+                float f, g;
+                if (n == 1) { f = 20000f; g = 0f; }
+                else if (i == 0) { f = toneHz; g = 0f; }
+                else {
+                    f = (float) (toneHz * Math.pow(20000.0 / toneHz, i / (double) (n - 1)));
+                    if (f <= toneHz) f = toneHz + i;
+                    g = hiCut * i / (n - 1);
+                }
+                postEq.setBand(i, new DynamicsProcessing.EqBand(true, f, g));
+            }
+            dp.setPostEqAllChannelsTo(postEq);
+        } catch (Throwable t) { issues.append("EQ2 ").append(short_(t)).append("; "); }
+
+        lastIssue = issues.length() == 0 ? null : issues.toString();
     }
 }

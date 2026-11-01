@@ -190,7 +190,7 @@ public class FxService extends Service implements SharedPreferences.OnSharedPref
             effects.put(session, dp);
             errors.remove(session);
         } catch (Throwable t) {
-            errors.put(session, t.getClass().getSimpleName());
+            errors.put(session, Fx.short_(t));
         }
         publish();
     }
@@ -212,6 +212,8 @@ public class FxService extends Service implements SharedPreferences.OnSharedPref
             s.add(e.getValue() + (err == null ? " — работает" : " — не удалось (" + err + ")"));
         }
         if (scanNote != null && running) s.add(scanNote);
+        String issue = Fx.lastIssue;
+        if (issue != null && running && !effects.isEmpty()) s.add("Часть настроек система не приняла: " + issue);
         status = s;
     }
 
