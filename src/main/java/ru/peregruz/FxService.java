@@ -49,6 +49,7 @@ public class FxService extends Service implements SharedPreferences.OnSharedPref
     private volatile String scanNote = null;
     private HandlerThread scanThread;
     private HandlerThread crackleThread;
+    private CrackleSynth synth;
     private Handler crackleHandler;
     private final java.util.Random rnd = new java.util.Random();
     private final Runnable crackleTask = new Runnable() {
@@ -122,53 +123,35 @@ public class FxService extends Service implements SharedPreferences.OnSharedPref
         crackleThread.start();
         crackleHandler = new Handler(crackleThread.getLooper());
         crackleHandler.post(crackleTask);
+        synth = new CrackleSynth();
+        synth.start();
         publish();
     }
 
-    /**
-     * Random clicks: short, loud, hard-clipped bursts ("crack"), sometimes in rapid series like a loose contact.
-     * Only the "Broken" type also gets dropouts; every other type keeps the music going.
-     * Returns the delay to the next tick.
-     */
+    /** "Broken" type only: random short dropouts. Also keeps the crackle layer in sync. */
     private long crackleOnce() {
-        int type = Fx.type(prefs);
-        float c = Fx.crackle(prefs) / 100f;
-        if (type == Fx.BROKEN) c = Math.max(c, 0.2f);
-        if (c <= 0f) return 200;
+        syncSynth();
+        if (Fx.type(prefs) != Fx.BROKEN) return 100;
+        float c = Math.max(Fx.crackle(prefs) / 100f, 0.2f);
         List<DynamicsProcessing> list;
         synchronized (this) { list = new ArrayList<>(effects.values()); }
         if (list.isEmpty()) return 200;
-        boolean dense = type == Fx.CRACKLING;
-        float prob = dense ? c * 0.9f : c * 0.35f;
-        if (rnd.nextFloat() > prob) return dense ? 6 + rnd.nextInt(20) : 20 + rnd.nextInt(40);
-
+        if (rnd.nextFloat() > c * 0.3f) return 30 + rnd.nextInt(60);
         float[] lim = Fx.limiter(prefs);
-        float gain = Fx.inputGain(prefs);
+        for (DynamicsProcessing dp : list) { try { Fx.setLimiter(dp, lim, -60f); } catch (Throwable ignored) {} }
+        sleep(8 + rnd.nextInt((int) (10 + 50 * c)));
+        for (DynamicsProcessing dp : list) { try { Fx.setLimiter(dp, lim, 0f); } catch (Throwable ignored) {} }
+        return 40 + rnd.nextInt((int) (40 + 160 * (1f - c)));
+    }
 
-        if (type == Fx.BROKEN && rnd.nextFloat() < 0.6f) {
-            // Dropout (Broken only).
-            for (DynamicsProcessing dp : list) { try { Fx.setLimiter(dp, lim, -60f); } catch (Throwable ignored) {} }
-            sleep(8 + rnd.nextInt((int) (10 + 50 * c)));
-            for (DynamicsProcessing dp : list) { try { Fx.setLimiter(dp, lim, 0f); } catch (Throwable ignored) {} }
-        } else {
-            // Aggressive crack: slam the input, crush it with a much harder clipper, and make it louder than the music.
-            float[] hard = {0.01f, 0.05f, 50f, Math.min(lim[3], -28f), 0f};
-            int series = rnd.nextFloat() < 0.35f + 0.3f * c ? 2 + rnd.nextInt(4) : 1;
-            for (int k = 0; k < series; k++) {
-                float loud = 4f + rnd.nextInt(7) + 4f * c;          // crack is 4..15 dB above the music
-                hard[4] = -hard[3] - 4f + Fx.outDb(Fx.out(prefs)) + loud;
-                float slam = gain + 18f + rnd.nextInt(13);           // +18..+30 dB into the clipper
-                for (DynamicsProcessing dp : list) {
-                    try { Fx.setGain(dp, slam); Fx.setLimiter(dp, hard, 0f); } catch (Throwable ignored) {}
-                }
-                sleep(3 + rnd.nextInt(dense ? 8 : 6));
-                for (DynamicsProcessing dp : list) {
-                    try { Fx.setGain(dp, gain); Fx.setLimiter(dp, lim, 0f); } catch (Throwable ignored) {}
-                }
-                if (k < series - 1) sleep(4 + rnd.nextInt(14));
-            }
-        }
-        return dense ? 4 + rnd.nextInt((int) (10 + 50 * (1f - c))) : 15 + rnd.nextInt((int) (20 + 120 * (1f - c)));
+    private void syncSynth() {
+        CrackleSynth s = synth;
+        if (s == null) return;
+        s.amount = Fx.crackle(prefs) / 100f;
+        boolean hasTargets;
+        synchronized (this) { hasTargets = !effects.isEmpty(); }
+        boolean scanning = prefs.getBoolean(Fx.K_PAIRED, false);
+        s.active = running && hasTargets && (!scanning || Discovery.playing);
     }
 
     private static void sleep(long ms) {
@@ -220,6 +203,7 @@ public class FxService extends Service implements SharedPreferences.OnSharedPref
         if (scanThread != null) scanThread.quitSafely();
         if (crackleHandler != null) { crackleHandler.removeCallbacksAndMessages(null); crackleHandler = null; }
         if (crackleThread != null) crackleThread.quitSafely();
+        if (synth != null) { synth.stop(); synth = null; }
         try { unregisterReceiver(receiver); } catch (Exception ignored) {}
         try { prefs.unregisterOnSharedPreferenceChangeListener(this); } catch (Exception ignored) {}
         for (DynamicsProcessing dp : effects.values()) {

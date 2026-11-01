@@ -19,6 +19,9 @@ public final class Discovery {
     private static final Pattern STATE = Pattern.compile("state:\\s*(\\w+)");
     private static final Pattern USAGE = Pattern.compile("usage[=:]\\s*(\\w+)", Pattern.CASE_INSENSITIVE);
 
+    /** True when at least one music app is actually playing (not paused). Updated by every scan. */
+    public static volatile boolean playing = false;
+
     /** Result: session id -> uid. Throws with a readable message when nothing can be read. */
     public static Map<Integer, Integer> scan(Context c) throws Exception {
         String dump = Adb.run(c, "dumpsys audio");
@@ -26,6 +29,7 @@ public final class Discovery {
         int lines = 0, playerLines = 0, sessionLines = 0;
         String sample = null;
         int myUid = android.os.Process.myUid();
+        boolean anyPlaying = false;
         for (String line : dump.split("\n")) {
             lines++;
             if (!line.contains("u/pid:") || !line.contains("AudioPlaybackConfiguration")) continue;
@@ -46,7 +50,9 @@ public final class Discovery {
                         || u.contains("SONIFICATION") || u.contains("ACCESSIBILITY") || u.contains("NAVIGATION")) continue;
             }
             out.put(session, uid);
+            if (state.startsWith("start")) anyPlaying = true;
         }
+        playing = anyPlaying;
         if (lines < 5) throw new Exception("система не отдала данные о звуке");
         if (playerLines > 0 && sessionLines == 0 && sample != null) {
             throw new Exception("не нашёл номера сессий: " + (sample.length() > 160 ? sample.substring(0, 160) : sample));

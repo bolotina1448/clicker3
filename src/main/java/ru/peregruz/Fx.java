@@ -65,7 +65,6 @@ public final class Fx {
             }
         }
         apply(dp, p);
-        dp.setEnabled(true);
         return dp;
     }
 
@@ -204,6 +203,9 @@ public final class Fx {
             }
             dp.setPostEqAllChannelsTo(postEq);
         } catch (Throwable t) { issues.append("EQ2 ").append(short_(t)).append("; "); }
+
+        // Drive at zero = music stays clean (only the crackle layer is heard).
+        try { dp.setEnabled(drive(p) > 0); } catch (Throwable t) { issues.append("on ").append(short_(t)).append("; "); }
 
         lastIssue = issues.length() == 0 ? null : issues.toString();
     }

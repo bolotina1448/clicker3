@@ -119,8 +119,9 @@ public class MainActivity extends Activity {
         hs.setHorizontalScrollBarEnabled(false);
         LinearLayout prow = hbox();
         hs.addView(prow);
-        preset(prow, "Сломанные наушники", Fx.CRACKLING, 65, 60, 10, 55, 66);
-        preset(prow, "Наушники на пределе", Fx.CRACKLING, 100, 60, 10, 85, 62);
+        preset(prow, "Только треск", Fx.CRACKLING, 0, 60, 10, 70, 70);
+        preset(prow, "Сломанные наушники", Fx.CRACKLING, 55, 60, 10, 65, 66);
+        preset(prow, "Наушники на пределе", Fx.CRACKLING, 100, 60, 10, 90, 62);
         preset(prow, "Сломанный динамик", Fx.BROKEN, 85, 45, 20, 75, 62);
         preset(prow, "Умирающая батарейка", Fx.BROKEN, 60, 40, 10, 100, 64);
         preset(prow, "Взорванный 808", Fx.DISTORTION, 90, 50, 0, 25, 66);
@@ -362,7 +363,8 @@ public class MainActivity extends Activity {
         low.setProgress(Fx.low(prefs));
         out.setProgress(Fx.out(prefs));
         crackle.setProgress(Fx.crackle(prefs));
-        vCrackle.setText(Fx.crackle(prefs) == 0 ? (type == Fx.BROKEN ? "чуть-чуть" : "выкл") : Fx.crackle(prefs) + "%");
+        vCrackle.setText(Fx.crackle(prefs) == 0 ? "выкл" : Fx.crackle(prefs) + "%");
+        if (Fx.drive(prefs) == 0) vDrive.setText("выкл (чистый звук)");
         if (type == Fx.CRACKLING) { vTone.setText("не нужен"); vLow.setText("не нужен"); }
         renderStatus();
     }
