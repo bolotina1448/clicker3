@@ -48,6 +48,16 @@ public class FxService extends Service implements SharedPreferences.OnSharedPref
     private final Set<Integer> fromScan = new HashSet<>();
     private volatile String scanNote = null;
     private HandlerThread scanThread;
+    private HandlerThread crackleThread;
+    private Handler crackleHandler;
+    private final java.util.Random rnd = new java.util.Random();
+    private final Runnable crackleTask = new Runnable() {
+        @Override public void run() {
+            long next = 25 + rnd.nextInt(40);
+            try { next = crackleOnce(); } catch (Throwable ignored) {}
+            if (crackleHandler != null) crackleHandler.postDelayed(this, next);
+        }
+    };
     private Handler scanHandler;
     private final Runnable scanTask = new Runnable() {
         @Override public void run() {
@@ -108,7 +118,40 @@ public class FxService extends Service implements SharedPreferences.OnSharedPref
         scanThread.start();
         scanHandler = new Handler(scanThread.getLooper());
         scanHandler.post(scanTask);
+        crackleThread = new HandlerThread("crackle", android.os.Process.THREAD_PRIORITY_AUDIO);
+        crackleThread.start();
+        crackleHandler = new Handler(crackleThread.getLooper());
+        crackleHandler.post(crackleTask);
         publish();
+    }
+
+    /** Random short dropouts and gain spikes: the "something is breaking" clicks. Returns the delay to the next tick. */
+    private long crackleOnce() {
+        float c = Fx.crackle(prefs) / 100f;
+        if (Fx.type(prefs) == Fx.BROKEN) c = Math.max(c, 0.2f);
+        if (c <= 0f) return 200;
+        List<DynamicsProcessing> list;
+        synchronized (this) { list = new ArrayList<>(effects.values()); }
+        if (list.isEmpty()) return 200;
+        if (rnd.nextFloat() > c * 0.35f) return 20 + rnd.nextInt(40);
+        float[] lim = Fx.limiter(prefs);
+        float gain = Fx.inputGain(prefs);
+        boolean dropout = rnd.nextFloat() < 0.6f;
+        long hold = dropout ? 8 + rnd.nextInt((int) (10 + 50 * c)) : 4 + rnd.nextInt(20);
+        for (DynamicsProcessing dp : list) {
+            try {
+                if (dropout) Fx.setLimiter(dp, lim, -60f);
+                else Fx.setGain(dp, gain + 10f + rnd.nextInt(8));
+            } catch (Throwable ignored) {}
+        }
+        try { Thread.sleep(hold); } catch (InterruptedException ignored) {}
+        for (DynamicsProcessing dp : list) {
+            try {
+                if (dropout) Fx.setLimiter(dp, lim, 0f);
+                else Fx.setGain(dp, gain);
+            } catch (Throwable ignored) {}
+        }
+        return 15 + rnd.nextInt((int) (20 + 120 * (1f - c)));
     }
 
     private void scanOnce() {
@@ -154,6 +197,8 @@ public class FxService extends Service implements SharedPreferences.OnSharedPref
         running = false;
         if (scanHandler != null) { scanHandler.removeCallbacksAndMessages(null); scanHandler = null; }
         if (scanThread != null) scanThread.quitSafely();
+        if (crackleHandler != null) { crackleHandler.removeCallbacksAndMessages(null); crackleHandler = null; }
+        if (crackleThread != null) crackleThread.quitSafely();
         try { unregisterReceiver(receiver); } catch (Exception ignored) {}
         try { prefs.unregisterOnSharedPreferenceChangeListener(this); } catch (Exception ignored) {}
         for (DynamicsProcessing dp : effects.values()) {

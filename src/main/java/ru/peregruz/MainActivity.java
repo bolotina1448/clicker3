@@ -37,9 +37,9 @@ public class MainActivity extends Activity {
     private TextView statusView, powerLabel;
     private View led;
     private Button power;
-    private final TextView[] typeButtons = new TextView[4];
-    private SeekBar drive, tone, low, out;
-    private TextView vDrive, vTone, vLow, vOut;
+    private final TextView[] typeButtons = new TextView[Fx.TYPE_NAMES.length];
+    private SeekBar drive, tone, low, out, crackle;
+    private TextView vDrive, vTone, vLow, vOut, vCrackle;
     private Switch global;
     private TextView accessView;
     private android.widget.EditText codeInput;
@@ -85,18 +85,21 @@ public class MainActivity extends Activity {
         pedal.addView(top);
 
         // type selector
-        LinearLayout seg = hbox();
+        LinearLayout seg = vbox();
         GradientDrawable segBg = round(0x40000000, 12);
         seg.setBackground(segBg);
         seg.setPadding(dp(4), dp(4), dp(4), dp(4));
-        for (int i = 0; i < 4; i++) {
+        LinearLayout segRow1 = hbox(), segRow2 = hbox();
+        seg.addView(segRow1);
+        seg.addView(segRow2);
+        for (int i = 0; i < Fx.TYPE_NAMES.length; i++) {
             final int t = i;
             TextView b = text(Fx.TYPE_NAMES[i], 13, SILK_DIM, true);
             b.setGravity(Gravity.CENTER);
             b.setPadding(0, dp(10), 0, dp(10));
             b.setOnClickListener(v -> { prefs.edit().putInt(Fx.K_TYPE, t).apply(); render(); });
             typeButtons[i] = b;
-            seg.addView(b, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+            (i < 3 ? segRow1 : segRow2).addView(b, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         }
         pedal.addView(seg, lp(dp(16), 0));
 
@@ -104,6 +107,8 @@ public class MainActivity extends Activity {
         drive = knob(pedal, "ДРАЙВ", vDrive, Fx.K_DRIVE, Fx.drive(prefs));
         tone = knob(pedal, "ТОН", vTone, Fx.K_TONE, Fx.tone(prefs));
         low = knob(pedal, "СРЕЗ НИЗА", vLow, Fx.K_LOW, Fx.low(prefs));
+        vCrackle = new TextView(this);
+        crackle = knob(pedal, "ТРЕСК", vCrackle, Fx.K_CRACKLE, Fx.crackle(prefs));
         out = knob(pedal, "ГРОМКОСТЬ", vOut, Fx.K_OUT, Fx.out(prefs));
 
         // presets
@@ -114,11 +119,13 @@ public class MainActivity extends Activity {
         hs.setHorizontalScrollBarEnabled(false);
         LinearLayout prow = hbox();
         hs.addView(prow);
-        preset(prow, "Тёплый ламповый", Fx.OVERDRIVE, 35, 55, 8, 70);
-        preset(prow, "Рок", Fx.DISTORTION, 62, 66, 22, 70);
-        preset(prow, "Взорванный 808", Fx.DISTORTION, 90, 50, 0, 66);
-        preset(prow, "Фузз-стена", Fx.FUZZ, 90, 58, 12, 64);
-        preset(prow, "Старое радио", Fx.RADIO, 70, 40, 60, 72);
+        preset(prow, "Сломанный динамик", Fx.BROKEN, 85, 45, 20, 75, 62);
+        preset(prow, "Умирающая батарейка", Fx.BROKEN, 60, 40, 10, 100, 64);
+        preset(prow, "Взорванный 808", Fx.DISTORTION, 90, 50, 0, 25, 66);
+        preset(prow, "Фузз-стена", Fx.FUZZ, 90, 58, 12, 10, 64);
+        preset(prow, "Рок", Fx.DISTORTION, 62, 66, 22, 0, 70);
+        preset(prow, "Тёплый ламповый", Fx.OVERDRIVE, 35, 55, 8, 0, 70);
+        preset(prow, "Старое радио", Fx.RADIO, 70, 40, 60, 30, 72);
         pedal.addView(hs);
 
         // footswitch
@@ -336,7 +343,7 @@ public class MainActivity extends Activity {
 
     private void render() {
         int type = Fx.type(prefs);
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < typeButtons.length; i++) {
             boolean sel = i == type;
             typeButtons[i].setTextColor(sel ? ENC : SILK_DIM);
             typeButtons[i].setBackground(sel ? round(SILK, 9) : null);
@@ -352,6 +359,8 @@ public class MainActivity extends Activity {
         tone.setProgress(Fx.tone(prefs));
         low.setProgress(Fx.low(prefs));
         out.setProgress(Fx.out(prefs));
+        crackle.setProgress(Fx.crackle(prefs));
+        vCrackle.setText(Fx.crackle(prefs) == 0 ? (type == Fx.BROKEN ? "чуть-чуть" : "выкл") : Fx.crackle(prefs) + "%");
         renderStatus();
     }
 
@@ -402,7 +411,7 @@ public class MainActivity extends Activity {
         return sb;
     }
 
-    private void preset(LinearLayout row, String name, int type, int d, int t, int l, int o) {
+    private void preset(LinearLayout row, String name, int type, int d, int t, int l, int cr, int o) {
         TextView b = text(name, 13, SILK, false);
         b.setPadding(dp(12), dp(7), dp(12), dp(7));
         GradientDrawable bg = round(0x38000000, 999);
@@ -410,7 +419,7 @@ public class MainActivity extends Activity {
         b.setBackground(bg);
         b.setOnClickListener(v -> {
             prefs.edit().putInt(Fx.K_TYPE, type).putInt(Fx.K_DRIVE, d).putInt(Fx.K_TONE, t)
-                    .putInt(Fx.K_LOW, l).putInt(Fx.K_OUT, o).apply();
+                    .putInt(Fx.K_LOW, l).putInt(Fx.K_CRACKLE, cr).putInt(Fx.K_OUT, o).apply();
             render();
         });
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
