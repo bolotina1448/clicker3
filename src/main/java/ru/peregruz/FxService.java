@@ -126,14 +126,14 @@ public class FxService extends Service implements SharedPreferences.OnSharedPref
     }
 
     /**
-     * Random short gain spikes into the clipper (crackles). Only the "Broken" type also gets dropouts;
-     * every other type keeps the music going. Returns the delay to the next tick.
+     * Random clicks: short, loud, hard-clipped bursts ("crack"), sometimes in rapid series like a loose contact.
+     * Only the "Broken" type also gets dropouts; every other type keeps the music going.
+     * Returns the delay to the next tick.
      */
     private long crackleOnce() {
         int type = Fx.type(prefs);
         float c = Fx.crackle(prefs) / 100f;
         if (type == Fx.BROKEN) c = Math.max(c, 0.2f);
-        // CRACKLING: clicks only from the slider, never dropouts.
         if (c <= 0f) return 200;
         List<DynamicsProcessing> list;
         synchronized (this) { list = new ArrayList<>(effects.values()); }
@@ -141,26 +141,38 @@ public class FxService extends Service implements SharedPreferences.OnSharedPref
         boolean dense = type == Fx.CRACKLING;
         float prob = dense ? c * 0.9f : c * 0.35f;
         if (rnd.nextFloat() > prob) return dense ? 6 + rnd.nextInt(20) : 20 + rnd.nextInt(40);
+
         float[] lim = Fx.limiter(prefs);
         float gain = Fx.inputGain(prefs);
-        boolean dropout = type == Fx.BROKEN && rnd.nextFloat() < 0.6f;
-        long hold = dropout ? 8 + rnd.nextInt((int) (10 + 50 * c))
-                : dense ? 2 + rnd.nextInt(5) : 3 + rnd.nextInt(10);
-        float spike = dense ? 8f + rnd.nextInt(11) : 10f + rnd.nextInt(8);
-        for (DynamicsProcessing dp : list) {
-            try {
-                if (dropout) Fx.setLimiter(dp, lim, -60f);
-                else Fx.setGain(dp, gain + spike);
-            } catch (Throwable ignored) {}
+
+        if (type == Fx.BROKEN && rnd.nextFloat() < 0.6f) {
+            // Dropout (Broken only).
+            for (DynamicsProcessing dp : list) { try { Fx.setLimiter(dp, lim, -60f); } catch (Throwable ignored) {} }
+            sleep(8 + rnd.nextInt((int) (10 + 50 * c)));
+            for (DynamicsProcessing dp : list) { try { Fx.setLimiter(dp, lim, 0f); } catch (Throwable ignored) {} }
+        } else {
+            // Aggressive crack: slam the input, crush it with a much harder clipper, and make it louder than the music.
+            float[] hard = {0.01f, 0.05f, 50f, Math.min(lim[3], -28f), 0f};
+            int series = rnd.nextFloat() < 0.35f + 0.3f * c ? 2 + rnd.nextInt(4) : 1;
+            for (int k = 0; k < series; k++) {
+                float loud = 4f + rnd.nextInt(7) + 4f * c;          // crack is 4..15 dB above the music
+                hard[4] = -hard[3] - 4f + Fx.outDb(Fx.out(prefs)) + loud;
+                float slam = gain + 18f + rnd.nextInt(13);           // +18..+30 dB into the clipper
+                for (DynamicsProcessing dp : list) {
+                    try { Fx.setGain(dp, slam); Fx.setLimiter(dp, hard, 0f); } catch (Throwable ignored) {}
+                }
+                sleep(3 + rnd.nextInt(dense ? 8 : 6));
+                for (DynamicsProcessing dp : list) {
+                    try { Fx.setGain(dp, gain); Fx.setLimiter(dp, lim, 0f); } catch (Throwable ignored) {}
+                }
+                if (k < series - 1) sleep(4 + rnd.nextInt(14));
+            }
         }
-        try { Thread.sleep(hold); } catch (InterruptedException ignored) {}
-        for (DynamicsProcessing dp : list) {
-            try {
-                if (dropout) Fx.setLimiter(dp, lim, 0f);
-                else Fx.setGain(dp, gain);
-            } catch (Throwable ignored) {}
-        }
-        return dense ? 4 + rnd.nextInt((int) (10 + 40 * (1f - c))) : 15 + rnd.nextInt((int) (20 + 120 * (1f - c)));
+        return dense ? 4 + rnd.nextInt((int) (10 + 50 * (1f - c))) : 15 + rnd.nextInt((int) (20 + 120 * (1f - c)));
+    }
+
+    private static void sleep(long ms) {
+        try { Thread.sleep(ms); } catch (InterruptedException ignored) {}
     }
 
     private void scanOnce() {
