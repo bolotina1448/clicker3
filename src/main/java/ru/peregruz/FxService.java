@@ -16,9 +16,13 @@ import android.content.pm.ServiceInfo;
 import android.media.audiofx.AudioEffect;
 import android.media.audiofx.DynamicsProcessing;
 import android.os.Build;
+import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.IBinder;
 
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,6 +45,16 @@ public class FxService extends Service implements SharedPreferences.OnSharedPref
     private final Map<Integer, String> labels = new LinkedHashMap<>();
     private final Map<Integer, String> errors = new LinkedHashMap<>();
     private SharedPreferences prefs;
+    private final Set<Integer> fromScan = new HashSet<>();
+    private volatile String scanNote = null;
+    private HandlerThread scanThread;
+    private Handler scanHandler;
+    private final Runnable scanTask = new Runnable() {
+        @Override public void run() {
+            scanOnce();
+            if (scanHandler != null) scanHandler.postDelayed(this, 2500);
+        }
+    };
 
     private final BroadcastReceiver receiver = new BroadcastReceiver() {
         @Override
@@ -90,6 +104,36 @@ public class FxService extends Service implements SharedPreferences.OnSharedPref
         prefs.registerOnSharedPreferenceChangeListener(this);
         running = true;
         if (prefs.getBoolean(Fx.K_GLOBAL, false)) attach(0, "Весь звук");
+        scanThread = new HandlerThread("scan");
+        scanThread.start();
+        scanHandler = new Handler(scanThread.getLooper());
+        scanHandler.post(scanTask);
+        publish();
+    }
+
+    private void scanOnce() {
+        if (!Discovery.hasPermission(this)) {
+            scanNote = "Автопоиск плееров выключен: нет доступа (кнопка «Дать доступ ко всем плеерам»).";
+            publish();
+            return;
+        }
+        try {
+            Map<Integer, Integer> found = Discovery.scan(this);
+            synchronized (this) {
+                for (Map.Entry<Integer, Integer> e : found.entrySet()) {
+                    if (!effects.containsKey(e.getKey()) && !errors.containsKey(e.getKey())) {
+                        attach(e.getKey(), Discovery.appName(this, e.getValue()));
+                        fromScan.add(e.getKey());
+                    }
+                }
+                for (Integer old : new ArrayList<>(fromScan)) {
+                    if (!found.containsKey(old)) { detach(old); fromScan.remove(old); }
+                }
+            }
+            scanNote = "Автопоиск плееров включён" + (found.isEmpty() ? ": сейчас ничего не играет." : ".");
+        } catch (Throwable t) {
+            scanNote = "Автопоиск не сработал: " + t.getMessage();
+        }
         publish();
     }
 
@@ -106,6 +150,8 @@ public class FxService extends Service implements SharedPreferences.OnSharedPref
     @Override
     public void onDestroy() {
         running = false;
+        if (scanHandler != null) { scanHandler.removeCallbacksAndMessages(null); scanHandler = null; }
+        if (scanThread != null) scanThread.quitSafely();
         try { unregisterReceiver(receiver); } catch (Exception ignored) {}
         try { prefs.unregisterOnSharedPreferenceChangeListener(this); } catch (Exception ignored) {}
         for (DynamicsProcessing dp : effects.values()) {
@@ -122,7 +168,7 @@ public class FxService extends Service implements SharedPreferences.OnSharedPref
     public IBinder onBind(Intent intent) { return null; }
 
     @Override
-    public void onSharedPreferenceChanged(SharedPreferences p, String key) {
+    public synchronized void onSharedPreferenceChanged(SharedPreferences p, String key) {
         if (Fx.K_GLOBAL.equals(key)) {
             if (p.getBoolean(Fx.K_GLOBAL, false)) attach(0, "Весь звук");
             else detach(0);
@@ -157,12 +203,13 @@ public class FxService extends Service implements SharedPreferences.OnSharedPref
         publish();
     }
 
-    private void publish() {
+    private synchronized void publish() {
         List<String> s = new ArrayList<>();
         for (Map.Entry<Integer, String> e : labels.entrySet()) {
             String err = errors.get(e.getKey());
             s.add(e.getValue() + (err == null ? " — работает" : " — не удалось (" + err + ")"));
         }
+        if (scanNote != null && running) s.add(scanNote);
         status = s;
     }
 

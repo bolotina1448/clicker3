@@ -41,6 +41,7 @@ public class MainActivity extends Activity {
     private SeekBar drive, tone, low, out;
     private TextView vDrive, vTone, vLow, vOut;
     private Switch global;
+    private TextView accessView;
 
     private final Runnable refresh = new Runnable() {
         @Override public void run() { renderStatus(); handler.postDelayed(this, 1000); }
@@ -148,14 +149,31 @@ public class MainActivity extends Activity {
         TextView gh = text("Если музыка звучит без эффекта, включите этот переключатель. На некоторых телефонах система его не пускает, тогда здесь появится «не удалось».", 13, SILK_DIM, false);
         root.addView(gh, lp(dp(4), 0));
 
+        // ---- access to all players ----
+        TextView al = text("ВСЕ ПЛЕЕРЫ: SPOTIFY, YOUTUBE И ДРУГИЕ", 11, SILK_DIM, true);
+        al.setLetterSpacing(0.12f);
+        root.addView(al, lp(dp(24), dp(6)));
+        root.addView(text("Многие приложения (в том числе Spotify) не сообщают системе о своём звуке. Чтобы педаль находила их сама, нужно один раз выдать доступ через приложение Shizuku.", 14, SILK, false));
+        Button access = new Button(this);
+        access.setAllCaps(false);
+        access.setText("Дать доступ ко всем плеерам");
+        access.setTextColor(INK);
+        access.setTypeface(Typeface.DEFAULT_BOLD);
+        access.setBackground(round(ACCENT, 12));
+        access.setOnClickListener(v -> giveAccess());
+        root.addView(access, lp(dp(12), 0));
+        accessView = text("", 14, SILK_DIM, false);
+        accessView.setTextIsSelectable(true);
+        root.addView(accessView, lp(dp(8), 0));
+
         // ---- how to ----
         TextView hl = text("КАК ЗАСТАВИТЬ РАБОТАТЬ", 11, SILK_DIM, true);
         hl.setLetterSpacing(0.12f);
         root.addView(hl, lp(dp(24), dp(6)));
         root.addView(text(
                 "1. Нажмите «Включить педаль».\n" +
-                "2. Откройте Spotify или другой плеер и запустите музыку заново: закройте приложение и откройте снова. Плеер сам сообщит системе о своём звуке, и он появится в списке выше.\n" +
-                "3. Если плеер не появился в списке, попробуйте открыть в его настройках «Эквалайзер», а если и это не помогло — включите «Весь звук телефона».\n" +
+                "2. Один раз выдайте доступ ко всем плеерам: установите Shizuku из Google Play, запустите его по подсказке внутри (через «Отладку по Wi-Fi»), затем нажмите «Дать доступ ко всем плеерам». На Xiaomi в «Для разработчиков» должен быть включён пункт «Отладка по USB (настройки безопасности)».\n" +
+                "3. Включите музыку в любом приложении. Через пару секунд оно появится в списке «К чему подключено».\n" +
                 "4. Чтобы HyperOS не выключала педаль: нажмите кнопку ниже, затем «Контроль активности» → «Нет ограничений» и включите «Автозапуск».\n" +
                 "5. Начинайте с небольшой громкости: дисторшн делает звук громче и резче.",
                 14, SILK, false));
@@ -192,6 +210,33 @@ public class MainActivity extends Activity {
         }
         handler.postDelayed(this::render, 300);
         handler.postDelayed(this::render, 1500);
+    }
+
+    private void giveAccess() {
+        if (Discovery.hasPermission(this)) {
+            accessView.setText("Доступ уже есть. Включите педаль и музыку: плеер появится в списке за пару секунд.");
+            return;
+        }
+        if (!ShizukuGrant.running()) {
+            accessView.setText("Shizuku не запущен. Установите его из Google Play, откройте и запустите через «Отладку по Wi-Fi» (там есть пошаговая подсказка). Потом вернитесь сюда и нажмите кнопку ещё раз.");
+            try {
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=moe.shizuku.privileged.api")));
+            } catch (Exception ignored) {}
+            return;
+        }
+        if (!ShizukuGrant.allowed()) {
+            accessView.setText("Разрешите «Перегрузу» доступ в окне Shizuku.");
+            try {
+                ShizukuGrant.ask((ok, msg) -> runOnUiThread(() -> { if (ok) giveAccess(); else accessView.setText(msg); }));
+            } catch (Throwable t) {
+                accessView.setText("Shizuku не ответил: " + t);
+            }
+            return;
+        }
+        accessView.setText("Выдаю доступ…");
+        new Thread(() -> ShizukuGrant.grant(this, (ok, msg) -> runOnUiThread(() -> accessView.setText(ok
+                ? "Готово! Теперь включите музыку: плеер появится в списке «К чему подключено» за пару секунд."
+                : msg + "\n\nНа Xiaomi включите в «Для разработчиков» пункт «Отладка по USB (настройки безопасности)» и нажмите кнопку снова.")))).start();
     }
 
     private void render() {
