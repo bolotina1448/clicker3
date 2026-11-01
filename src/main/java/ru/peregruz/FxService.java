@@ -133,7 +133,7 @@ public class FxService extends Service implements SharedPreferences.OnSharedPref
         int type = Fx.type(prefs);
         float c = Fx.crackle(prefs) / 100f;
         if (type == Fx.BROKEN) c = Math.max(c, 0.2f);
-        if (type == Fx.CRACKLING) return 200; // one pure effect: no random clicks
+        // CRACKLING: clicks only from the slider, never dropouts.
         if (c <= 0f) return 200;
         List<DynamicsProcessing> list;
         synchronized (this) { list = new ArrayList<>(effects.values()); }
