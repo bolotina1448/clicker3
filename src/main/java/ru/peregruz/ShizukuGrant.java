@@ -34,13 +34,23 @@ public final class ShizukuGrant {
         Shizuku.requestPermission(7);
     }
 
+    /** Runs a command as the ADB shell user through Shizuku. */
+    public static Process exec(String... cmd) throws Exception {
+        Method m = Shizuku.class.getDeclaredMethod("newProcess", String[].class, String[].class, String.class);
+        m.setAccessible(true);
+        try {
+            return (Process) m.invoke(null, cmd, null, null);
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            Throwable c = e.getCause();
+            if (c instanceof Exception) throw (Exception) c;
+            throw e;
+        }
+    }
+
     /** Runs on a background thread; reports on the same thread. */
     public static void grant(Context c, Callback cb) {
         try {
-            Method m = Shizuku.class.getDeclaredMethod("newProcess", String[].class, String[].class, String.class);
-            m.setAccessible(true);
-            Process p = (Process) m.invoke(null,
-                    new String[]{"pm", "grant", c.getPackageName(), Discovery.DUMP}, null, null);
+            Process p = exec("pm", "grant", c.getPackageName(), Discovery.DUMP);
             StringBuilder out = new StringBuilder();
             try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getErrorStream()))) {
                 String l;

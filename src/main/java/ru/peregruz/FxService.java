@@ -112,13 +112,17 @@ public class FxService extends Service implements SharedPreferences.OnSharedPref
     }
 
     private void scanOnce() {
-        if (!Discovery.hasPermission(this)) {
-            scanNote = "Автопоиск плееров выключен: нет доступа (кнопка «Дать доступ ко всем плеерам»).";
+        boolean direct = Discovery.hasPermission(this);
+        boolean viaShizuku = !direct && ShizukuGrant.running() && ShizukuGrant.allowed();
+        if (!direct && !viaShizuku) {
+            scanNote = ShizukuGrant.running()
+                    ? "Автопоиск плееров выключен: разрешите «Перегруз» в Shizuku (кнопка «Дать доступ ко всем плеерам»)."
+                    : "Автопоиск плееров выключен: запустите Shizuku.";
             publish();
             return;
         }
         try {
-            Map<Integer, Integer> found = Discovery.scan(this);
+            Map<Integer, Integer> found = Discovery.scan(this, viaShizuku);
             synchronized (this) {
                 for (Map.Entry<Integer, Integer> e : found.entrySet()) {
                     if (!effects.containsKey(e.getKey()) && !errors.containsKey(e.getKey())) {
@@ -130,7 +134,8 @@ public class FxService extends Service implements SharedPreferences.OnSharedPref
                     if (!found.containsKey(old)) { detach(old); fromScan.remove(old); }
                 }
             }
-            scanNote = "Автопоиск плееров включён" + (found.isEmpty() ? ": сейчас ничего не играет." : ".");
+            scanNote = "Автопоиск плееров включён" + (viaShizuku ? " (через Shizuku)" : "")
+                    + (found.isEmpty() ? ": сейчас ничего не играет." : ".");
         } catch (Throwable t) {
             scanNote = "Автопоиск не сработал: " + t.getMessage();
         }

@@ -172,7 +172,7 @@ public class MainActivity extends Activity {
         root.addView(hl, lp(dp(24), dp(6)));
         root.addView(text(
                 "1. Нажмите «Включить педаль».\n" +
-                "2. Один раз выдайте доступ ко всем плеерам: установите Shizuku из Google Play, запустите его по подсказке внутри (через «Отладку по Wi-Fi»), затем нажмите «Дать доступ ко всем плеерам». На Xiaomi в «Для разработчиков» должен быть включён пункт «Отладка по USB (настройки безопасности)».\n" +
+                "2. Запустите Shizuku (через «Отладку по Wi-Fi») и нажмите «Дать доступ ко всем плеерам». Если Shizuku не показывает окно разрешения, включите «Перегруз» вручную в Shizuku → «Управление приложениями».\n" +
                 "3. Включите музыку в любом приложении. Через пару секунд оно появится в списке «К чему подключено».\n" +
                 "4. Чтобы HyperOS не выключала педаль: нажмите кнопку ниже, затем «Контроль активности» → «Нет ограничений» и включите «Автозапуск».\n" +
                 "5. Начинайте с небольшой громкости: дисторшн делает звук громче и резче.",
@@ -218,25 +218,21 @@ public class MainActivity extends Activity {
             return;
         }
         if (!ShizukuGrant.running()) {
-            accessView.setText("Shizuku не запущен. Установите его из Google Play, откройте и запустите через «Отладку по Wi-Fi» (там есть пошаговая подсказка). Потом вернитесь сюда и нажмите кнопку ещё раз.");
-            try {
-                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=moe.shizuku.privileged.api")));
-            } catch (Exception ignored) {}
+            accessView.setText("Shizuku не запущен. Откройте Shizuku и нажмите «Запустить» в блоке «Запуск через отладку по Wi-Fi», потом вернитесь сюда и нажмите кнопку ещё раз.");
             return;
         }
         if (!ShizukuGrant.allowed()) {
-            accessView.setText("Разрешите «Перегрузу» доступ в окне Shizuku.");
+            accessView.setText("Разрешите «Перегрузу» доступ в окне Shizuku.\n\nЕсли окно не появилось или Shizuku пишет «Доступ к adb ограничен»: откройте Shizuku, нажмите «Управление приложениями» (или «Авторизованные приложения») и включите переключатель у «Перегруза». Потом вернитесь сюда.");
             try {
-                ShizukuGrant.ask((ok, msg) -> runOnUiThread(() -> { if (ok) giveAccess(); else accessView.setText(msg); }));
-            } catch (Throwable t) {
-                accessView.setText("Shizuku не ответил: " + t);
-            }
+                ShizukuGrant.ask((ok, msg) -> runOnUiThread(() -> { if (ok) giveAccess(); }));
+            } catch (Throwable ignored) {}
             return;
         }
-        accessView.setText("Выдаю доступ…");
+        accessView.setText("Проверяю доступ…");
         new Thread(() -> ShizukuGrant.grant(this, (ok, msg) -> runOnUiThread(() -> accessView.setText(ok
-                ? "Готово! Теперь включите музыку: плеер появится в списке «К чему подключено» за пару секунд."
-                : msg + "\n\nНа Xiaomi включите в «Для разработчиков» пункт «Отладка по USB (настройки безопасности)» и нажмите кнопку снова.")))).start();
+                ? "Готово! Доступ выдан насовсем. Включите педаль и музыку: плеер появится в списке за пару секунд."
+                : "Готово! Shizuku подключён. Xiaomi не разрешает выдать доступ насовсем, поэтому педаль будет искать плееры через Shizuku. "
+                + "Важно: Shizuku должен быть запущен, а после перезагрузки телефона его нужно запускать заново.\n\nВключите педаль и музыку: плеер появится в списке за пару секунд.")))).start();
     }
 
     private void render() {

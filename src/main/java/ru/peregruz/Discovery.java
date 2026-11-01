@@ -29,8 +29,10 @@ public final class Discovery {
     }
 
     /** Result: session id -> uid. Throws with a readable message when nothing can be read. */
-    public static Map<Integer, Integer> scan(Context c) throws Exception {
-        Process p = new ProcessBuilder("dumpsys", "audio").redirectErrorStream(true).start();
+    public static Map<Integer, Integer> scan(Context c, boolean viaShizuku) throws Exception {
+        Process p = viaShizuku
+                ? ShizukuGrant.exec("dumpsys", "audio")
+                : new ProcessBuilder("dumpsys", "audio").redirectErrorStream(true).start();
         Map<Integer, Integer> out = new LinkedHashMap<>();
         int lines = 0, playerLines = 0;
         String sample = null;
