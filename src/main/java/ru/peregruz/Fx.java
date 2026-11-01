@@ -88,7 +88,7 @@ public final class Fx {
         float d = drive(p) / 100f;
         int t = type(p);
         if (t == BROKEN) return 12f + d * 36f;
-        if (t == CRACKLING) return 4f + d * 22f;
+        if (t == CRACKLING) return 6f + d * 30f;
         return d * 30f;
     }
 
@@ -100,7 +100,7 @@ public final class Fx {
             case FUZZ:      attack = 0.1f;  release = 1f;   ratio = 30f; threshold = -14f - d * 16f; break;
             case RADIO:     attack = 0.1f;  release = 2f;   ratio = 20f; threshold = -10f - d * 16f; break;
             case BROKEN:    attack = 0.01f; release = 0.2f; ratio = 50f; threshold = -24f - d * 12f; break;
-            case CRACKLING: attack = 0.01f; release = 0.5f; ratio = 30f; threshold = -10f - d * 12f; break;
+            case CRACKLING: attack = 0.01f; release = 0.1f; ratio = 50f; threshold = -6f - d * 18f; break;
             default:        attack = 0.1f;  release = 2f;   ratio = 20f; threshold = -10f - d * 18f; break;
         }
         float post = -threshold - 4f + outDb(out(p));
@@ -136,14 +136,18 @@ public final class Fx {
         }
         StringBuilder issues = new StringBuilder();
 
+        if (type == CRACKLING) { lowHz = 150f; toneHz = 16000f; }
+
         // Pre-EQ: cut the lows before the clipper, push the mids into it.
+        // CRACKLING: no colour, only the bass pushed harder into the clipper, like a speaker cone hitting its limit.
         try {
             int n = eqBands(dp.getPreEqByChannelIndex(0), 3);
             DynamicsProcessing.Eq pre = new DynamicsProcessing.Eq(true, true, n);
             for (int i = 0; i < n; i++) {
                 float f = n == 1 ? 20000f : (float) (lowHz * Math.pow(20000.0 / lowHz, i / (double) (n - 1)));
                 float g;
-                if (i == 0) g = lowHz > 25f ? -24f : 0f;
+                if (type == CRACKLING) g = i == 0 ? 6f * d : 0f;
+                else if (i == 0) g = lowHz > 25f ? -24f : 0f;
                 else if (f >= 800f && f <= 5000f) g = (type == BROKEN ? 8f : type == CRACKLING ? 4f : 3f) * d;
                 else g = 0f;
                 pre.setBand(i, new DynamicsProcessing.EqBand(true, f, g));
@@ -155,7 +159,7 @@ public final class Fx {
         int nb = mbcBands(dp);
         if (nb > 0) {
             try {
-                boolean on = type == BROKEN || type == CRACKLING || c > 0f;
+                boolean on = type != CRACKLING && (type == BROKEN || c > 0f);
                 float gate, expander;
                 if (type == BROKEN) { gate = -42f + Math.max(c, 0.4f) * 34f; expander = 6f + c * 44f; }
                 else if (type == CRACKLING) { gate = -62f + c * 24f; expander = 1.5f + c * 2.5f; }  // mild: crackly, never silent
@@ -185,7 +189,7 @@ public final class Fx {
         // Post-EQ: the tone control, a high cut above toneHz. "Broken" also gets a tinny, torn-cone peak.
         try {
             int n = eqBands(dp.getPostEqByChannelIndex(0), 3);
-            float hiCut = type == RADIO ? -36f : type == BROKEN ? -24f : -18f;
+            float hiCut = type == RADIO ? -36f : type == BROKEN ? -24f : type == CRACKLING ? 0f : -18f;
             DynamicsProcessing.Eq postEq = new DynamicsProcessing.Eq(true, true, n);
             for (int i = 0; i < n; i++) {
                 float f, g;
