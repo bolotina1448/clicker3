@@ -4,6 +4,8 @@ import net.minecraft.block.material.Material;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.settings.KeyBinding;
+import net.minecraft.item.ItemBlock;
+import net.minecraft.item.ItemStack;
 import net.minecraft.util.ChatComponentText;
 import net.minecraft.util.EnumChatFormatting;
 import net.minecraft.util.MovingObjectPosition;
@@ -79,6 +81,11 @@ public class PurpleClicker {
                 && mc.theWorld.getBlockState(mop.getBlockPos()).getBlock().getMaterial() != Material.air;
     }
 
+    private static boolean holdingBlock(Minecraft mc) {
+        ItemStack held = mc.thePlayer.getHeldItem();
+        return held != null && held.stackSize > 0 && held.getItem() instanceof ItemBlock;
+    }
+
     private static boolean aimingAtEntity(Minecraft mc) {
         MovingObjectPosition mop = mc.objectMouseOver;
         return mop != null && mop.typeOfHit == MovingObjectPosition.MovingObjectType.ENTITY;
@@ -145,8 +152,8 @@ public class PurpleClicker {
         }
 
         // ---- Right clicker: runs while you hold the right mouse button ----
-        // With "Only on blocks" it clicks only while the crosshair is on a block (for placing blocks).
-        if (Settings.rightEnabled && Mouse.isButtonDown(1) && (!Settings.rightOnlyBlocks || aimingAtBlock(mc))) {
+        // With "Only blocks" it clicks only while you hold a block (not rods, snowballs, eggs, pearls, etc.).
+        if (Settings.rightEnabled && Mouse.isButtonDown(1) && (!Settings.rightOnlyBlocks || holdingBlock(mc))) {
             if (nextRight == 0) {
                 nextRight = now + delay(Settings.rightCps, Settings.rightCps);
             } else {

@@ -18,7 +18,7 @@ public final class Settings {
     public static int leftMaxCps = 12;
     public static boolean rightEnabled = false;
     public static int rightCps = 10;
-    public static boolean rightOnlyBlocks = true; // right clicker works only while aiming at a block
+    public static boolean rightOnlyBlocks = true; // right clicker works only with a block in hand
     public static boolean breakBlocks = true;  // pause left clicker while aiming at a block
     public static boolean showHud = true;
     public static int accentHue = 275;         // 275 = purple
