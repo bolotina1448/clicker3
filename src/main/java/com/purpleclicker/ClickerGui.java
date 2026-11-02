@@ -72,6 +72,8 @@ public class ClickerGui extends GuiScreen {
         List<Element> right = new ArrayList<Element>();
         right.add(new Toggle("Right clicker", "Auto-click when holding RMB",
                 () -> Settings.rightEnabled, v -> Settings.rightEnabled = v));
+        right.add(new Toggle("Only on blocks", "Clicks only while aiming at a block",
+                () -> Settings.rightOnlyBlocks, v -> Settings.rightOnlyBlocks = v));
         right.add(new Slider("CPS", 1, Settings.MAX_CPS, () -> Settings.rightCps, v -> Settings.rightCps = v, ""));
         pages.add(right);
 

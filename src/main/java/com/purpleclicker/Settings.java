@@ -18,6 +18,7 @@ public final class Settings {
     public static int leftMaxCps = 12;
     public static boolean rightEnabled = false;
     public static int rightCps = 10;
+    public static boolean rightOnlyBlocks = true; // right clicker works only while aiming at a block
     public static boolean breakBlocks = true;  // pause left clicker while aiming at a block
     public static boolean showHud = true;
     public static int accentHue = 275;         // 275 = purple
@@ -35,6 +36,7 @@ public final class Settings {
         leftMaxCps   = cfg.get(c, "leftMaxCps", leftMaxCps).getInt();
         rightEnabled = cfg.get(c, "rightEnabled", rightEnabled).getBoolean();
         rightCps     = cfg.get(c, "rightCps", rightCps).getInt();
+        rightOnlyBlocks = cfg.get(c, "rightOnlyBlocks", rightOnlyBlocks).getBoolean();
         breakBlocks  = cfg.get(c, "breakBlocks", breakBlocks).getBoolean();
         showHud      = cfg.get(c, "showHud", showHud).getBoolean();
         accentHue    = cfg.get(c, "accentHue", accentHue).getInt();
@@ -53,6 +55,7 @@ public final class Settings {
         cfg.get(c, "leftMaxCps", 12).set(leftMaxCps);
         cfg.get(c, "rightEnabled", false).set(rightEnabled);
         cfg.get(c, "rightCps", 10).set(rightCps);
+        cfg.get(c, "rightOnlyBlocks", true).set(rightOnlyBlocks);
         cfg.get(c, "breakBlocks", true).set(breakBlocks);
         cfg.get(c, "showHud", true).set(showHud);
         cfg.get(c, "accentHue", 275).set(accentHue);

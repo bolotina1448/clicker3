@@ -145,7 +145,8 @@ public class PurpleClicker {
         }
 
         // ---- Right clicker: runs while you hold the right mouse button ----
-        if (Settings.rightEnabled && Mouse.isButtonDown(1)) {
+        // With "Only on blocks" it clicks only while the crosshair is on a block (for placing blocks).
+        if (Settings.rightEnabled && Mouse.isButtonDown(1) && (!Settings.rightOnlyBlocks || aimingAtBlock(mc))) {
             if (nextRight == 0) {
                 nextRight = now + delay(Settings.rightCps, Settings.rightCps);
             } else {
