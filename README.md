@@ -9,6 +9,7 @@ Client-side autoclicker with a purple, customizable menu.
 The clicker only runs while you hold the mouse button down:
 - Left: random CPS between Min and Max (1-50)
 - Right: fixed CPS (1-50), off by default
+- "Only blocks" (on by default): the right clicker clicks only while you hold a block, not rods, snowballs, eggs, pearls and other items
 - "Break blocks" stops clicking while you mine, so blocks break normally
 - Accent hue/saturation sliders recolor the menu and HUD; "Reset to purple" restores the default
 
